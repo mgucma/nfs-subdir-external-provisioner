@@ -26,12 +26,40 @@ die () {
     exit 1
 }
 
-version=$("$GO" version) || die "determining version of $GO failed"
-# shellcheck disable=SC2001
-majorminor=$(echo "$version" | sed -e 's/.*go\([0-9]*\)\.\([0-9]*\).*/\1.\2/')
+resolve_go () {
+    local candidate
+
+    if [ -x "$GO" ]; then
+        return 0
+    fi
+
+    if candidate=$(command -v "$GO" 2>/dev/null); then
+        GO="$candidate"
+        return 0
+    fi
+
+    if command -v mise >/dev/null 2>&1; then
+        candidate=$(mise which go 2>/dev/null || true)
+        if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+            GO="$candidate"
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+if ! resolve_go; then
+    die "could not find go binary '$1'"
+fi
+
 # SC1091: Not following: release-tools/prow.sh was not specified as input (see shellcheck -x).
 # shellcheck disable=SC1091
 expected=$(. release-tools/prow.sh >/dev/null && echo "$CSI_PROW_GO_VERSION_BUILD")
+
+version=$("$GO" version) || die "determining version of $GO failed"
+# shellcheck disable=SC2001
+majorminor=$(echo "$version" | sed -e 's/.*go\([0-9]*\)\.\([0-9]*\).*/\1.\2/')
 
 if [ "$majorminor" != "$expected" ]; then
     cat >&2 <<EOF
