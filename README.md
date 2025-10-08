@@ -329,3 +329,21 @@ The pipeline adds several labels:
 * The provisioned storage is not guaranteed. You may allocate more than the NFS share's total size. The share may also not have enough storage space left to actually accommodate the request.
 * The provisioned storage limit is not enforced. The application can expand to use all the available storage regardless of the provisioned size.
 * Storage resize/expansion operations are not presently supported in any form. You will end up in an error state: `Ignoring the PVC: didn't find a plugin capable of expanding the volume; waiting for an external controller to process this PVC.`
+
+## Diagnosing NFS errors
+
+When you need to triage issues on a cluster that is already running the provisioner, application or node logs are often the first place you look. The repository now ships with a small helper utility that scans log files for messages that mention NFS along with common error keywords. This can help you quickly locate timeouts, access problems, or other suspicious events before diving deeper into the logs.
+
+Build and run the scanner locally:
+
+```sh
+$ go build ./cmd/nfs-error-scan
+$ ./nfs-error-scan /var/log/syslog
+```
+
+You can pass one or more files or directories. When a directory is provided the tool walks it recursively and reports all matches, printing the file name, line number, and the log line that appears to contain an NFS-related error. If no files are listed, it reads from standard input so you can easily pipe log streams into it.
+
+```sh
+$ journalctl -u kubelet | ./nfs-error-scan
+```
+
