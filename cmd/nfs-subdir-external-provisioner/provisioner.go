@@ -104,8 +104,21 @@ func (p *nfsProvisioner) Provision(ctx context.Context, options controller.Provi
 
 	pathPattern, exists := options.StorageClass.Parameters["pathPattern"]
 	if exists {
-		customPath := metadata.stringParser(pathPattern)
+		customPath := strings.TrimSpace(metadata.stringParser(pathPattern))
 		if customPath != "" {
+			customPath = filepath.Clean(customPath)
+
+			if filepath.IsAbs(customPath) {
+				customPath = strings.TrimPrefix(customPath, string(filepath.Separator))
+			}
+
+			switch customPath {
+			case "", ".":
+				customPath = ""
+			}
+		}
+
+		if customPath != "" && !strings.HasPrefix(customPath, "..") {
 			path = filepath.Join(p.path, customPath)
 			fullPath = filepath.Join(mountPath, customPath)
 		}
@@ -115,9 +128,11 @@ func (p *nfsProvisioner) Provision(ctx context.Context, options controller.Provi
 	if err := os.MkdirAll(fullPath, 0o777); err != nil {
 		return nil, controller.ProvisioningFinished, errors.New("unable to create directory to provision new pv: " + err.Error())
 	}
-	err := os.Chmod(fullPath, 0o777)
-	if err != nil {
-		return nil, "", err
+	if err := os.Chmod(fullPath, 0o777); err != nil {
+		if removeErr := os.RemoveAll(fullPath); removeErr != nil {
+			glog.Warningf("unable to clean up path %s after chmod error: %v", fullPath, removeErr)
+		}
+		return nil, controller.ProvisioningFinished, fmt.Errorf("unable to set permissions on %s: %w", fullPath, err)
 	}
 
 	pv := &v1.PersistentVolume{
@@ -144,9 +159,19 @@ func (p *nfsProvisioner) Provision(ctx context.Context, options controller.Provi
 }
 
 func (p *nfsProvisioner) Delete(ctx context.Context, volume *v1.PersistentVolume) error {
-	path := volume.Spec.PersistentVolumeSource.NFS.Path
+	path := filepath.Clean(volume.Spec.PersistentVolumeSource.NFS.Path)
 	basePath := filepath.Base(path)
-	oldPath := strings.Replace(path, p.path, mountPath, 1)
+
+	serverPath := filepath.Clean(p.path)
+	relPath, err := filepath.Rel(serverPath, path)
+	if err != nil {
+		return fmt.Errorf("failed to resolve relative path for %s: %w", path, err)
+	}
+	if strings.HasPrefix(relPath, "..") {
+		return fmt.Errorf("invalid path %s for server root %s", path, serverPath)
+	}
+
+	oldPath := filepath.Join(mountPath, relPath)
 
 	if _, err := os.Stat(oldPath); os.IsNotExist(err) {
 		glog.Warningf("path %s does not exist, deletion skipped", oldPath)

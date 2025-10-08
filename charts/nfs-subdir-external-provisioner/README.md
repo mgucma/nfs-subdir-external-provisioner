@@ -53,7 +53,7 @@ The following tables lists the configurable parameters of this chart and their d
 | `replicaCount`                       | Number of provisioner instances to deployed                                                           | `1`                                                           |
 | `strategyType`                       | Specifies the strategy used to replace old Pods by new ones                                           | `Recreate`                                                    |
 | `image.repository`                   | Provisioner image                                                                                     | `registry.k8s.io/sig-storage/nfs-subdir-external-provisioner` |
-| `image.tag`                          | Version of provisioner image                                                                          | `v4.0.2`                                                      |
+| `image.tag`                          | Version of provisioner image                                                                          | `v4.0.3`                                                      |
 | `image.pullPolicy`                   | Image pull policy                                                                                     | `IfNotPresent`                                                |
 | `imagePullSecrets`                   | Image pull secrets                                                                                    | `[]`                                                          |
 | `storageClass.name`                  | Name of the storageClass                                                                              | `nfs-client`                                                  |
