@@ -69,6 +69,8 @@ The following tables lists the configurable parameters of this chart and their d
 | `storageClass.volumeBindingMode`     | Set volume binding mode for Storage Class                                                             | `Immediate`                                                   |
 | `storageClass.annotations`           | Set additional annotations for the StorageClass                                                       | `{}`                                                          |
 | `leaderElection.enabled`             | Enables or disables leader election                                                                   | `true`                                                        |
+| `provisioner.defaultArchiveOnDelete` | Default archive behaviour when PVC/SC do not set it              | null                                                          |
+| `provisioner.defaultOnDelete`        | Default onDelete strategy when PVC/SC do not set it              | null                                                          |
 | `nfs.server`                         | Hostname of the NFS server (required)                                                                 | null (ip or hostname)                                         |
 | `nfs.path`                           | Basepath of the mount point to be used                                                                | `/nfs-storage`                                                |
 | `nfs.mountOptions`                   | Mount options (e.g. 'nfsvers=3')                                                                      | null                                                          |

@@ -61,6 +61,16 @@ spec:
             - name: ENABLE_LEADER_ELECTION
               value: "false"
             {{- end }}
+            {{- $defaultArchive := .Values.provisioner.defaultArchiveOnDelete }}
+            {{- if not (kindIs "invalid" $defaultArchive) }}
+            - name: PROVISIONER_ARCHIVE_ON_DELETE
+              value: {{ $defaultArchive | quote }}
+            {{- end }}
+            {{- $defaultOnDelete := .Values.provisioner.defaultOnDelete }}
+            {{- if not (kindIs "invalid" $defaultOnDelete) }}
+            - name: PROVISIONER_ON_DELETE
+              value: {{ $defaultOnDelete | quote }}
+            {{- end }}
           {{- with .Values.resources }}
           resources:
 {{ toYaml . | indent 12 }}
