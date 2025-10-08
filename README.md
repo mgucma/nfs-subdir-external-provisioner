@@ -11,6 +11,18 @@ Note: This repository is migrated from https://github.com/kubernetes-incubator/e
 
 To note again, you must _already_ have an NFS Server.
 
+### Container images
+
+The v4.0.3 release rebuilds every published container image to pick up the
+Alpine 3.19 base layers and the latest security fixes. Update or push the
+following images when cutting the release:
+
+| Artifact | Purpose |
+| --- | --- |
+| `registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.3` | Multi-architecture manifest built from [`Dockerfile.multiarch`](Dockerfile.multiarch). |
+| `registry.k8s.io/sig-storage/nfs-subdir-external-provisioner-arm:v4.0.3` | ARMv7 image produced from [`docker/arm/Dockerfile`](docker/arm/Dockerfile). |
+| `registry.k8s.io/sig-storage/nfs-subdir-external-provisioner-amd64:v4.0.3` | AMD64 image produced from [`docker/x86_64/Dockerfile`](docker/x86_64/Dockerfile). |
+
 ### With Helm
 
 Follow the instructions from the helm chart [README](charts/nfs-subdir-external-provisioner/README.md).
@@ -208,7 +220,7 @@ spec:
       serviceAccountName: nfs-client-provisioner
       containers:
         - name: nfs-client-provisioner
-          image: registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.2
+          image: registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.3
           volumeMounts:
             - name: nfs-client-root
               mountPath: /persistentvolumes
