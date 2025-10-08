@@ -61,6 +61,12 @@ leaderElection:
   # When set to false leader election will be disabled
   enabled: true
 
+provisioner:
+  # Default archive behaviour when not specified on the StorageClass or PVC annotation.
+  defaultArchiveOnDelete:
+  # Default onDelete strategy when not specified on the StorageClass or PVC annotation.
+  defaultOnDelete:
+
 ## For RBAC support:
 rbac:
   # Specifies whether RBAC resources should be created

@@ -40,13 +40,21 @@ import (
 )
 
 const (
-	provisionerNameKey = "PROVISIONER_NAME"
+	provisionerNameKey           = "PROVISIONER_NAME"
+	envArchiveOnDelete           = "PROVISIONER_ARCHIVE_ON_DELETE"
+	envOnDelete                  = "PROVISIONER_ON_DELETE"
+	pvcAnnotationArchiveOnDelete = "nfs.io/archive-on-delete"
+	pvcAnnotationOnDelete        = "nfs.io/on-delete"
+	pvAnnotationArchiveOnDelete  = "nfs.io/archive-on-delete"
+	pvAnnotationOnDelete         = "nfs.io/on-delete"
 )
 
 type nfsProvisioner struct {
-	client kubernetes.Interface
-	server string
-	path   string
+	client                 kubernetes.Interface
+	server                 string
+	path                   string
+	defaultArchiveOnDelete *bool
+	defaultOnDelete        string
 }
 
 type pvcMetadata struct {
@@ -78,6 +86,99 @@ const (
 )
 
 var _ controller.Provisioner = &nfsProvisioner{}
+
+func normalizeOnDelete(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "delete":
+		return "delete"
+	case "retain":
+		return "retain"
+	default:
+		return ""
+	}
+}
+
+func (p *nfsProvisioner) resolveDeleteOptionsForProvision(options controller.ProvisionOptions) (string, *bool, error) {
+	var onDelete string
+	if options.StorageClass != nil {
+		onDelete = normalizeOnDelete(options.StorageClass.Parameters["onDelete"])
+	}
+	if annotation := options.PVC.Annotations[pvcAnnotationOnDelete]; annotation != "" {
+		if normalized := normalizeOnDelete(annotation); normalized != "" {
+			onDelete = normalized
+		}
+	}
+	if onDelete == "" {
+		onDelete = normalizeOnDelete(p.defaultOnDelete)
+	}
+
+	var archiveOnDelete *bool
+	if options.StorageClass != nil {
+		if value, exists := options.StorageClass.Parameters["archiveOnDelete"]; exists {
+			parsed, err := strconv.ParseBool(value)
+			if err != nil {
+				return "", nil, fmt.Errorf("failed to parse archiveOnDelete parameter: %w", err)
+			}
+			archiveOnDelete = &parsed
+		}
+	}
+
+	if value, exists := options.PVC.Annotations[pvcAnnotationArchiveOnDelete]; exists && value != "" {
+		parsed, err := strconv.ParseBool(value)
+		if err != nil {
+			return "", nil, fmt.Errorf("failed to parse %s annotation: %w", pvcAnnotationArchiveOnDelete, err)
+		}
+		archiveOnDelete = &parsed
+	} else if archiveOnDelete == nil && p.defaultArchiveOnDelete != nil {
+		defaultValue := *p.defaultArchiveOnDelete
+		archiveOnDelete = &defaultValue
+	}
+
+	return onDelete, archiveOnDelete, nil
+}
+
+func (p *nfsProvisioner) resolveDeleteOptionsForVolume(volume *v1.PersistentVolume, storageClass *storage.StorageClass) (string, *bool, error) {
+	var onDelete string
+	if volume.Annotations != nil {
+		if value := normalizeOnDelete(volume.Annotations[pvAnnotationOnDelete]); value != "" {
+			onDelete = value
+		}
+	}
+	if onDelete == "" && storageClass != nil {
+		onDelete = normalizeOnDelete(storageClass.Parameters["onDelete"])
+	}
+	if onDelete == "" {
+		onDelete = normalizeOnDelete(p.defaultOnDelete)
+	}
+
+	var archiveOnDelete *bool
+	if volume.Annotations != nil {
+		if value, exists := volume.Annotations[pvAnnotationArchiveOnDelete]; exists && value != "" {
+			parsed, err := strconv.ParseBool(value)
+			if err != nil {
+				return "", nil, fmt.Errorf("failed to parse %s annotation on PV %s: %w", pvAnnotationArchiveOnDelete, volume.Name, err)
+			}
+			archiveOnDelete = &parsed
+		}
+	}
+	if archiveOnDelete == nil && storageClass != nil {
+		if value, exists := storageClass.Parameters["archiveOnDelete"]; exists {
+			parsed, err := strconv.ParseBool(value)
+			if err != nil {
+				return "", nil, fmt.Errorf("failed to parse archiveOnDelete parameter on StorageClass %s: %w", storageClass.Name, err)
+			}
+			archiveOnDelete = &parsed
+		} else if p.defaultArchiveOnDelete != nil {
+			defaultValue := *p.defaultArchiveOnDelete
+			archiveOnDelete = &defaultValue
+		}
+	} else if archiveOnDelete == nil && p.defaultArchiveOnDelete != nil {
+		defaultValue := *p.defaultArchiveOnDelete
+		archiveOnDelete = &defaultValue
+	}
+
+	return onDelete, archiveOnDelete, nil
+}
 
 func (p *nfsProvisioner) Provision(ctx context.Context, options controller.ProvisionOptions) (*v1.PersistentVolume, controller.ProvisioningState, error) {
 	if options.PVC.Spec.Selector != nil {
@@ -135,9 +236,30 @@ func (p *nfsProvisioner) Provision(ctx context.Context, options controller.Provi
 		return nil, controller.ProvisioningFinished, fmt.Errorf("unable to set permissions on %s: %w", fullPath, err)
 	}
 
+	onDelete, archiveOnDelete, err := p.resolveDeleteOptionsForProvision(options)
+	if err != nil {
+		if removeErr := os.RemoveAll(fullPath); removeErr != nil {
+			glog.Warningf("unable to clean up path %s after delete options error: %v", fullPath, removeErr)
+		}
+		return nil, controller.ProvisioningFinished, err
+	}
+
+	annotations := map[string]string{}
+	if onDelete != "" {
+		annotations[pvAnnotationOnDelete] = onDelete
+	}
+	if archiveOnDelete != nil {
+		annotations[pvAnnotationArchiveOnDelete] = strconv.FormatBool(*archiveOnDelete)
+	}
+
+	if len(annotations) == 0 {
+		annotations = nil
+	}
+
 	pv := &v1.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: options.PVName,
+			Name:        options.PVName,
+			Annotations: annotations,
 		},
 		Spec: v1.PersistentVolumeSpec{
 			PersistentVolumeReclaimPolicy: *options.StorageClass.ReclaimPolicy,
@@ -183,10 +305,14 @@ func (p *nfsProvisioner) Delete(ctx context.Context, volume *v1.PersistentVolume
 		return err
 	}
 
-	// Determine if the "onDelete" parameter exists.
+	onDelete, archiveOnDelete, err := p.resolveDeleteOptionsForVolume(volume, storageClass)
+	if err != nil {
+		return err
+	}
+
+	// Determine if the "onDelete" option exists.
 	// If it exists and has a `delete` value, delete the directory.
-	// If it exists and has a `retain` value, safe the directory.
-	onDelete := storageClass.Parameters["onDelete"]
+	// If it exists and has a `retain` value, save the directory.
 	switch onDelete {
 	case "delete":
 		return os.RemoveAll(oldPath)
@@ -194,18 +320,11 @@ func (p *nfsProvisioner) Delete(ctx context.Context, volume *v1.PersistentVolume
 		return nil
 	}
 
-	// Determine if the "archiveOnDelete" parameter exists.
+	// Determine if the "archiveOnDelete" option exists.
 	// If it exists and has a false value, delete the directory.
 	// Otherwise, archive it.
-	archiveOnDelete, exists := storageClass.Parameters["archiveOnDelete"]
-	if exists {
-		archiveBool, err := strconv.ParseBool(archiveOnDelete)
-		if err != nil {
-			return err
-		}
-		if !archiveBool {
-			return os.RemoveAll(oldPath)
-		}
+	if archiveOnDelete != nil && !*archiveOnDelete {
+		return os.RemoveAll(oldPath)
 	}
 
 	archivePath := filepath.Join(mountPath, "archived-"+basePath)
@@ -286,10 +405,30 @@ func main() {
 		}
 	}
 
+	var defaultArchiveOnDelete *bool
+	if value := os.Getenv(envArchiveOnDelete); value != "" {
+		parsed, err := strconv.ParseBool(value)
+		if err != nil {
+			glog.Fatalf("Unable to parse %s env var: %v", envArchiveOnDelete, err)
+		}
+		defaultArchiveOnDelete = &parsed
+	}
+
+	defaultOnDelete := ""
+	if value := os.Getenv(envOnDelete); value != "" {
+		normalized := normalizeOnDelete(value)
+		if normalized == "" {
+			glog.Fatalf("Invalid value for %s env var: %s", envOnDelete, value)
+		}
+		defaultOnDelete = normalized
+	}
+
 	clientNFSProvisioner := &nfsProvisioner{
-		client: clientset,
-		server: server,
-		path:   path,
+		client:                 clientset,
+		server:                 server,
+		path:                   path,
+		defaultArchiveOnDelete: defaultArchiveOnDelete,
+		defaultOnDelete:        defaultOnDelete,
 	}
 	// Start the provision controller which will dynamically provision efs NFS
 	// PVs

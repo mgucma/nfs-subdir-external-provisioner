@@ -32,6 +32,11 @@ spec:
               value: 10.3.243.101
             - name: NFS_PATH
               value: /ifs/kubernetes
+            # Optional: configure default deletion behaviour for the provisioner
+            # - name: PROVISIONER_ARCHIVE_ON_DELETE
+            #   value: "false"
+            # - name: PROVISIONER_ON_DELETE
+            #   value: "retain"
       volumes:
         - name: nfs-client-root
           nfs:

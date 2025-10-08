@@ -246,6 +246,13 @@ spec:
 
 Note: If you want to change the PROVISIONER_NAME above from `k8s-sigs.io/nfs-subdir-external-provisioner` to something else like `myorg/nfs-storage`, remember to also change the PROVISIONER_NAME in the storage class definition below.
 
+The provisioner supports additional environment variables to configure default deletion behaviour when it is not provided on the StorageClass or the PVC (see [deletion behaviour configuration](docs/deletion-behaviour.md) for the full precedence model):
+
+| Variable                         | Accepted values      | Description |
+| -------------------------------- | -------------------- | ----------- |
+| `PROVISIONER_ARCHIVE_ON_DELETE` | `true`, `false`      | Sets the provisioner-wide default for archiving the backing directory when the PVC is deleted. |
+| `PROVISIONER_ON_DELETE`         | `delete`, `retain`   | Sets the provisioner-wide default deletion strategy. When defined it overrides the archive default. |
+
 To disable leader election, define an env variable named ENABLE_LEADER_ELECTION and set its value to false.
 
 **Step 5: Deploying your storage class**
@@ -257,6 +264,13 @@ To disable leader election, define an env variable named ENABLE_LEADER_ELECTION 
 | onDelete        | If it exists and has a delete value, delete the directory, if it exists and has a retain value, save the directory.                                                          | will be archived with name on the share: `archived-<volume.Name>` |
 | archiveOnDelete | If it exists and has a false value, delete the directory. if `onDelete` exists, `archiveOnDelete` will be ignored.                                                           | will be archived with name on the share: `archived-<volume.Name>` |
 | pathPattern     | Specifies a template for creating a directory path via PVC metadata's such as labels, annotations, name or namespace. To specify metadata use `${.PVC.<metadata>}`. Example: If folder should be named like `<pvc-namespace>-<pvc-name>`, use `${.PVC.namespace}-${.PVC.name}` as pathPattern. |                               n/a                                |
+
+**PVC Annotations:**
+
+| Annotation                    | Accepted values    | Description |
+| ----------------------------- | ------------------ | ----------- |
+| `nfs.io/on-delete`            | `delete`, `retain` | Overrides the deletion strategy for the specific PVC. |
+| `nfs.io/archive-on-delete`    | `true`, `false`    | Overrides the archive behaviour for the specific PVC. Ignored when `nfs.io/on-delete` is set to `delete` or `retain`. |
 
 This is `deploy/class.yaml` which defines the NFS subdir external provisioner's Kubernetes Storage Class:
 
