@@ -7,6 +7,12 @@ Note: This repository is migrated from https://github.com/kubernetes-incubator/e
 - To maintain backward compatibility with earlier deployment files, the naming of NFS Client Provisioner is retained as `nfs-client-provisioner` in the deployment YAMLs.
 - One of the pending areas for development on this repository is to add automated e2e tests. If you would like to contribute, please raise an issue or reach us on the Kubernetes slack #sig-storage channel.
 
+## Requirements
+
+- A Kubernetes 1.24 or newer cluster.
+- A matching `kubectl` (or `oc`) client at 1.24 or newer; Red Hat Enterprise Linux 8.9 ships the required client bits out of the box.
+- Worker nodes with NFS client support (for example the `nfs-utils` package on Red Hat Enterprise Linux 8.9).
+
 ## How to deploy NFS Subdir External Provisioner to your cluster
 
 To note again, you must _already_ have an NFS Server.

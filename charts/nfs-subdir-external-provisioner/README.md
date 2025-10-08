@@ -17,8 +17,9 @@ This charts installs custom [storage class](https://kubernetes.io/docs/concepts/
 
 ## Prerequisites
 
-- Kubernetes >=1.9
-- Existing NFS Share
+- Kubernetes >=1.24
+- `kubectl` (or `oc`) 1.24 or newer. The tooling included with Red Hat Enterprise Linux 8.9 satisfies this requirement.
+- Existing NFS Share available from worker nodes (validated with the `nfs-utils` client shipped in Red Hat Enterprise Linux 8.9).
 
 ## Installing the Chart
 
