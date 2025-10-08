@@ -13,6 +13,14 @@ jobs:
         name: Checkout
         uses: actions/checkout@v2
       -
+        name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: go.mod
+      -
+        name: Run Go tests
+        run: go test ./...
+      -
         name: Prepare
         id: prep
         run: |
